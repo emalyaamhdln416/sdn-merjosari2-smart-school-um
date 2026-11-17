@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, createContext, useContext } from 'react';
+import { supabase, isSupabaseConfigured } from './supabase';
 import {
   MapPin, Phone, Mail, Building, Sparkles,
   ClipboardList, UserCheck, History, Send, RefreshCw, ExternalLink,
@@ -3922,8 +3923,32 @@ function AdminProfileModule() {
 // ============================================================================
 
 function MainShell() {
-  const { viewMode, currentUser, toast } = useSchool();
+  const { viewMode, currentUser, toast, showToast } = useSchool();
   const [loginOpen, setLoginOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const testSupabaseConnection = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        console.warn('Supabase belum dikonfigurasi. Periksa Environment Variables Vercel.');
+        return;
+      }
+
+      const { error } = await supabase.from('guestbook').select('*').limit(1);
+      if (!active) return;
+
+      if (error) {
+        console.error('Supabase connection test:', error);
+        showToast('Supabase merespons, tetapi akses tabel guestbook belum berhasil. Periksa izin RLS dan struktur tabel.', 'error');
+      } else {
+        showToast('Koneksi Supabase berhasil. Tabel guestbook dapat diakses.');
+      }
+    };
+
+    testSupabaseConnection();
+    return () => { active = false; };
+  }, [showToast]);
 
   return (
     <>
