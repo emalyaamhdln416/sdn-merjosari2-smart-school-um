@@ -1228,15 +1228,19 @@ function PublicGuestbook() {
     notes: ''
   });
   const [receipt, setReceipt] = useState(null);
+  const [submitFeedback, setSubmitFeedback] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitFeedback({ type: 'info', message: 'Sedang mengirim data ke database...' });
     if (!form.name.trim() || !form.institution.trim() || !form.phone.trim() || !form.destination.trim()) {
-      showToast('Mohon lengkapi Nama, Instansi, Nomor HP, dan Tujuan Kunjungan!', 'error');
+      setSubmitFeedback({ type: 'error', message: 'Mohon lengkapi Nama, Instansi, Nomor HP, dan Tujuan Kunjungan.' });
+      showToast('Mohon lengkapi data wajib kunjungan!', 'error');
       return;
     }
     if (!isSupabaseConfigured || !supabase) {
-      showToast('Koneksi database belum tersedia. Silakan coba beberapa saat lagi.', 'error');
+      setSubmitFeedback({ type: 'error', message: 'Koneksi database belum tersedia. Periksa pengaturan Vercel.' });
+      showToast('Koneksi database belum tersedia.', 'error');
       return;
     }
 
@@ -1249,21 +1253,27 @@ function PublicGuestbook() {
       `Catatan: ${form.notes.trim() || '-'}`
     ].join('\n');
 
-    const { data, error } = await supabase
-      .from('guestbook')
-      .insert([{
-        name: form.name.trim(),
-        institution: form.institution.trim(),
-        purpose: form.purpose,
-        message,
-        status: 'Menunggu Verifikasi'
-      }])
-      .select()
-      .single();
+    let data;
+    try {
+      const result = await supabase
+        .from('guestbook')
+        .insert([{
+          name: form.name.trim(),
+          institution: form.institution.trim(),
+          purpose: form.purpose,
+          message,
+          status: 'Menunggu Verifikasi'
+        }])
+        .select()
+        .single();
 
-    if (error) {
+      if (result.error) throw result.error;
+      data = result.data;
+    } catch (error) {
       console.error('Gagal menyimpan Buku Tamu ke Supabase:', error);
-      showToast(`Data belum tersimpan ke database: ${error.message}`, 'error');
+      const detail = error?.message || error?.details || 'Kesalahan tidak diketahui saat mengirim data.';
+      setSubmitFeedback({ type: 'error', message: `Gagal menyimpan ke Supabase: ${detail}` });
+      showToast('Data Buku Tamu gagal dikirim. Lihat keterangan pada formulir.', 'error');
       return;
     }
 
@@ -1271,6 +1281,7 @@ function PublicGuestbook() {
     setDb(prev => ({ ...prev, guestbook: [newEntry, ...prev.guestbook.filter(entry => String(entry.id) !== String(newEntry.id))] }));
     addNotification('Buku Tamu Digital Baru', `${form.name} (${form.institution}) - ${form.destination}`, 'bukutamu');
     setReceipt(newEntry);
+    setSubmitFeedback({ type: 'success', message: 'Berhasil! Data Buku Tamu sudah dikirim ke Supabase.' });
     showToast('Registrasi Buku Tamu berhasil tersimpan ke Supabase!');
     setForm({ name: '', institution: '', phone: '', purpose: 'Kunjungan Dinas', destination: '', notes: '' });
   };
@@ -1369,6 +1380,11 @@ function PublicGuestbook() {
           >
             <CheckCircle className="w-4 h-4" /> Simpan & Dapatkan Nomor Kunjungan
           </button>
+          {submitFeedback && (
+            <div role="status" aria-live="polite" className={`rounded-xl px-4 py-3 text-sm font-medium ${submitFeedback.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : submitFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+              {submitFeedback.message}
+            </div>
+          )}
         </form>
 
         {/* Visitor Pass / Status Card */}
