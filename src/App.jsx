@@ -1264,8 +1264,6 @@ function PublicGuestbook() {
           message,
           status: 'Menunggu Verifikasi'
         }])
-        .select()
-        .single();
 
       if (result.error) throw result.error;
       data = result.data;
