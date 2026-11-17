@@ -1275,7 +1275,15 @@ function PublicGuestbook() {
       return;
     }
 
-    const newEntry = mapGuestbookRow(data);
+    const newEntry = mapGuestbookRow({
+  id: regNumber,
+  name: form.name.trim(),
+  institution: form.institution.trim(),
+  purpose: form.purpose,
+  message,
+  status: 'Menunggu Verifikasi',
+  created_at: now.toISOString()
+});
     setDb(prev => ({ ...prev, guestbook: [newEntry, ...prev.guestbook.filter(entry => String(entry.id) !== String(newEntry.id))] }));
     addNotification('Buku Tamu Digital Baru', `${form.name} (${form.institution}) - ${form.destination}`, 'bukutamu');
     setReceipt(newEntry);
