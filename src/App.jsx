@@ -3146,14 +3146,41 @@ function AdminGuestbookModule() {
     return matchSearch && matchPurpose;
   });
 
-  const toggleVerifyGuest = (guest) => {
-    const nextState = !guest.verified;
+  const toggleVerifyGuest = async (guest) => {
+  const nextState = !guest.verified;
+  const nextStatus = nextState ? 'Terverifikasi' : 'Menunggu Verifikasi';
+
+  try {
+    if (!supabase) throw new Error('Koneksi Supabase belum tersedia.');
+
+    const { data, error } = await supabase
+      .from('guestbook')
+      .update({ status: nextStatus })
+      .like('message', `%No. Registrasi: ${guest.regNumber}%`)
+      .select('id');
+
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('Data kunjungan tidak ditemukan di Supabase.');
+    }
+
     setDb(prev => ({
       ...prev,
-      guestbook: prev.guestbook.map(g => g.id === guest.id ? { ...g, verified: nextState } : g)
+      guestbook: prev.guestbook.map(g =>
+        g.id === guest.id ? { ...g, verified: nextState } : g
+      )
     }));
-    showToast(nextState ? `Kunjungan ${guest.regNumber} telah diverifikasi!` : `Verifikasi ${guest.regNumber} dibatalkan.`);
-  };
+
+    showToast(
+      nextState
+        ? `Kunjungan ${guest.regNumber} telah diverifikasi!`
+        : `Verifikasi ${guest.regNumber} dibatalkan.`
+    );
+  } catch (error) {
+    console.error('Gagal memperbarui status buku tamu:', error);
+    showToast(`Gagal memperbarui Supabase: ${error.message}`, 'error');
+  }
+};
 
   const exportCSV = () => {
     const headers = ['No Registrasi,Nama,Instansi,No HP,Keperluan,Tujuan Kunjungan,Tanggal,Waktu,Status Verifikasi'];
