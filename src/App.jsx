@@ -1411,12 +1411,7 @@ function PublicGuestbook() {
                 <div className="flex justify-between gap-2"><span className="text-emerald-100 shrink-0">Tujuan:</span><span className="font-semibold text-right">{receipt.destination}</span></div>
                 <div className="flex justify-between"><span className="text-emerald-100">Waktu:</span><span className="font-semibold">{receipt.date} • {receipt.time} WIB</span></div>
               </div>
-              <button
-                onClick={() => window.print()}
-                className="w-full py-2.5 rounded-xl bg-white text-emerald-800 font-semibold text-xs hover:bg-emerald-50 transition flex items-center justify-center gap-2"
-              >
-                <Printer className="w-4 h-4" /> Cetak Bukti Kunjungan
-              </button>
+             
             </div>
           ) : (
             <div className="bg-blue-50 border border-blue-100 rounded-3xl p-6 space-y-3">
