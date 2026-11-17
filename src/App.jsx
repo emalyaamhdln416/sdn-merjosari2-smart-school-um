@@ -445,6 +445,30 @@ function downloadCalendarPDF(agendas, monthFilter = '') {
 // 4. RELATIONAL APPLICATION CONTEXT & LOCALSTORAGE PERSISTENCE
 // ============================================================================
 
+const mapGuestbookRow = (row) => {
+  const message = String(row.message || '');
+  const readMessage = (label) => {
+    const line = message.split('\n').find(item => item.startsWith(`${label}:`));
+    return line ? line.slice(label.length + 1).trim() : '';
+  };
+  const createdAt = row.created_at ? new Date(row.created_at) : new Date();
+  const regNumber = readMessage('No. Registrasi') || `GT-${createdAt.getFullYear()}-${String(row.id).slice(0, 4).toUpperCase()}`;
+  const status = String(row.status || '').toLowerCase();
+  return {
+    id: row.id,
+    regNumber,
+    name: row.name || '',
+    institution: row.institution || '',
+    phone: readMessage('Nomor HP'),
+    purpose: row.purpose || 'Lainnya',
+    destination: readMessage('Tujuan'),
+    notes: readMessage('Catatan'),
+    date: createdAt.toISOString().slice(0, 10),
+    time: createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    verified: ['terverifikasi', 'verified', 'approved'].includes(status)
+  };
+};
+
 const SchoolContext = createContext(null);
 
 function SchoolProvider({ children }) {
@@ -482,6 +506,34 @@ function SchoolProvider({ children }) {
       console.error('Failed saving state:', e);
     }
   }, [db]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return undefined;
+    let active = true;
+
+    const loadGuestbookFromSupabase = async () => {
+      const { data, error } = await supabase
+        .from('guestbook')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Gagal memuat Buku Tamu dari Supabase:', error);
+        return;
+      }
+      if (!active || !Array.isArray(data)) return;
+
+      const remoteEntries = data.map(mapGuestbookRow);
+      setDb(prev => {
+        const remoteIds = new Set(remoteEntries.map(entry => String(entry.id)));
+        const localOnlyEntries = prev.guestbook.filter(entry => !remoteIds.has(String(entry.id)));
+        return { ...prev, guestbook: [...remoteEntries, ...localOnlyEntries] };
+      });
+    };
+
+    loadGuestbookFromSupabase();
+    return () => { active = false; };
+  }, []);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -1177,30 +1229,49 @@ function PublicGuestbook() {
   });
   const [receipt, setReceipt] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim() || !form.institution.trim() || !form.phone.trim() || !form.destination.trim()) {
       showToast('Mohon lengkapi Nama, Instansi, Nomor HP, dan Tujuan Kunjungan!', 'error');
       return;
     }
+    if (!isSupabaseConfigured || !supabase) {
+      showToast('Koneksi database belum tersedia. Silakan coba beberapa saat lagi.', 'error');
+      return;
+    }
+
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 5);
     const regNumber = `GT-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const message = [
+      `No. Registrasi: ${regNumber}`,
+      `Nomor HP: ${form.phone.trim()}`,
+      `Tujuan: ${form.destination.trim()}`,
+      `Catatan: ${form.notes.trim() || '-'}`
+    ].join('\n');
 
-    const newEntry = {
-      id: `gb-${Date.now()}`,
-      regNumber,
-      ...form,
-      date: dateStr,
-      time: timeStr,
-      verified: false
-    };
+    const { data, error } = await supabase
+      .from('guestbook')
+      .insert([{
+        name: form.name.trim(),
+        institution: form.institution.trim(),
+        purpose: form.purpose,
+        message,
+        status: 'Menunggu Verifikasi'
+      }])
+      .select()
+      .single();
 
-    setDb(prev => ({ ...prev, guestbook: [newEntry, ...prev.guestbook] }));
+    if (error) {
+      console.error('Gagal menyimpan Buku Tamu ke Supabase:', error);
+      showToast(`Data belum tersimpan ke database: ${error.message}`, 'error');
+      return;
+    }
+
+    const newEntry = mapGuestbookRow(data);
+    setDb(prev => ({ ...prev, guestbook: [newEntry, ...prev.guestbook.filter(entry => String(entry.id) !== String(newEntry.id))] }));
     addNotification('Buku Tamu Digital Baru', `${form.name} (${form.institution}) - ${form.destination}`, 'bukutamu');
     setReceipt(newEntry);
-    showToast('Registrasi Buku Tamu berhasil tersimpan!');
+    showToast('Registrasi Buku Tamu berhasil tersimpan ke Supabase!');
     setForm({ name: '', institution: '', phone: '', purpose: 'Kunjungan Dinas', destination: '', notes: '' });
   };
 
